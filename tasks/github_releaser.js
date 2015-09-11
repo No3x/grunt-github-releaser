@@ -47,7 +47,6 @@ module.exports = function(grunt) {
         fs.stat(options.file, function (err, stats) {
           fs.createReadStream(options.file).pipe(
             request.post(makeUploadUrl(options.upload_url, path.basename(options.file)), {
-              auth: options.auth,
               headers: {
                 "Content-Type": "application/zip",
                 "Content-Length": stats.size
@@ -81,13 +80,33 @@ module.exports = function(grunt) {
       return showError(['"repository" must be specified']);
     }
 
-    //Default request options
-    request = request.defaults({
-      json: true,
-      headers: { 'User-Agent': 'Grunt Github release task' },
-      auth: options.auth
-    });
+	var headers = [];
+	headers['User-Agent'] = 'Grunt Github release task';
+	var auth = [];
+	var authStr;
+	if (options.auth) {
+		if (options.auth.token) {
+			authStr = options.auth.token + ':' + '';
+			headers['Authorization'] = 'Basic ' + (new Buffer(authStr).toString('base64'));
+		} else if(options.auth.user && options.auth.password) {
+			auth['user'] = options.auth.user;
+			auth['password'] = options.auth.password;
+		} else {
+			throw new Error('Please supply a token or user & password to authorize yourself.');
+		}
+	}
 
+	//Default request options
+	var defaults = {
+      json: true,
+      headers: headers,
+	  auth: auth
+    };
+	if( authStr )
+		delete defaults.auth; 
+		
+	request = request.defaults(defaults);
+	 
     var files = this.files;
 
     getReleases(function(err, resp, releases){
@@ -99,6 +118,8 @@ module.exports = function(grunt) {
       // });
 
       addRelease(options.version, function (err, resp, release) {
+	  //console.log("Release id:" + release.id);
+	  //console.log("Release upload url: " + release.upload_url)
         if(err || (release.errors && release.errors.length > 0)){
           return showError(["Error while creating release " + options.version + ":", err || release.errors]);
         }
